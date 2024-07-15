@@ -1,2 +1,2 @@
 # TFIM_with_crlqas
-Utilization of Reinforcement Learning in solving TFIM.
+I am solving the Traverse Field Ising Model (TFIM) using the recently proposed Curriculum Reinforcement Learning baed on Quantum Architecture Search (CRLQAS).
