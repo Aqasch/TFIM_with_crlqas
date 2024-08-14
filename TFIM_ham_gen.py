@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg as la
+import matplotlib.pyplot as plt
 
 def pauli_matrices():
     """Return the Pauli matrices."""
@@ -17,10 +18,10 @@ def construct_hamiltonian(J, h, N):
 
     Some information:
 
-    -- At B<1, the system is in the ordered phase. In this phase the ground state breaks the spin-flip symmetry. 
+    -- At h<1, the system is in the ordered phase. In this phase the ground state breaks the spin-flip symmetry. 
                Thus, the ground state is in fact two-fold degenerate.
-    -- At B=1, we observe quantum phase transition.
-    -- At B>1, the system is in the disordered phase. Here, the ground state does preserve the spin-flip symmetry, 
+    -- At h=1, we observe quantum phase transition.
+    -- At h>1, the system is in the disordered phase. Here, the ground state does preserve the spin-flip symmetry, 
                and is nondegenerate.
     """
 
@@ -42,29 +43,89 @@ def construct_hamiltonian(J, h, N):
     return H
 
 
-J = 1
-h = 1
-N = 2
-H = construct_hamiltonian(J, h, N)
+def TFIM_hardness_measure_plot():
+    J = 1 # HOPPIN STRENGTH
+    for q in [2]:
+        N = q # NUMBER OF QUBITS
+        energy_sep_avg = []
+        x_axis = np.arange(0.0, 1+0.01, 0.001)
+        for h in x_axis:
+            h = np.round(h,2)
+            H = construct_hamiltonian(J, h, N)
+            eigs = list(sorted(la.eig(H)[0].real))
+            smallest_eig = list(sorted(eigs))[0]
+            energy_sep = []
+            for el in [1]:
+                energy_sep.append(np.abs(smallest_eig - eigs[el]))
+            energy_sep_avg.append(np.mean(energy_sep))    
+        plt.semilogx( x_axis, energy_sep_avg, '--o', label = f'qubits: {N}')
+    plt.legend(ncol = 3)
+    plt.ylabel('$\\Delta E$', fontsize = 12)
+    plt.xlabel('$h$', fontsize = 12)
+    plt.savefig('delta_with_h_log.pdf')
+    plt.savefig('delta_with_h_log.png')
+    plt.show()
 
-# print(np.min(la.eig(H)[0].real))
-print('Sum of pauli coeff:', (N-1)*-J+ N*-h)
+
+def hamitlonian_contruct_with_J():
+    """
+    h fixed
+    """
+    for J in np.arange(0.1, 2, 0.4):
+        J = np.round(J,2)
+        h = 1
+        N = 2
+        H = construct_hamiltonian(J, h, N)
+
+        # print(np.min(la.eig(H)[0].real))
+        print(f'J:{J}, h:{h}, N:{N}')
+        print('Sum of pauli coeff:', (N-1)*-J+ N*-h)
+
+        ham = dict()
+        ham['hamiltonian'], ham['eigvals'] = H, la.eig(H)[0].real
+
+        print('Minimum eigenvalue', np.min(ham['eigvals']))
+        # exit()
+
+        np.savez(f'ham_data/tfim_{N}q_j{J}_h{h}.npz', **ham)
+
+        ham = np.load(f"ham_data/tfim_{N}q_j{J}_h{h}.npz")
+        _, eigvals = ham['hamiltonian'], ham['eigvals']
+
+        print('Eigenvalues', eigvals)
+        print('x-x-x-x-x-x-x-x')
+        print()
 
 
-ham = dict()
-ham['hamiltonian'], ham['eigvals'] = H, la.eig(H)[0].real
 
-print(np.min(ham['eigvals']))
-exit()
+def hamitlonian_contruct_with_hardness():
+    """
+    J fixed
+        -- h << J hard problem. 
+            - Ferromagnetic region
+            - Phase transition might occurs
+            - |Ground - Excited| ~ very small
+            - Many local minima
+        -- h >> J easier problem
+            - Paramagnetic region
+    """
+    J = 1 # HOPPIN STRENGTH
+    N = 2 # NUMBER OF QUBITS 
+    for h in [0.001, 0.05, 0.1, 0.5, 1, 1.5]:
+        h = h
+        print(h)
+        H = construct_hamiltonian(J, h, N)
+        print(f'J:{J}, h:{h}, N:{N}')
+        print('Sum of pauli coeff:', (N-1)*-J+ N*-h)
+        ham = dict()
+        ham['hamiltonian'], ham['eigvals'] = H, la.eig(H)[0].real
+        print('Minimum eigenvalue', np.min(ham['eigvals']))
+        np.savez(f'ham_data/tfim_{N}q_j{J}_h{h}.npz', **ham)
+        ham = np.load(f"ham_data/tfim_{N}q_j{J}_h{h}.npz")
+        _, eigvals = ham['hamiltonian'], ham['eigvals']
+        print('Eigenvalues', eigvals)
+        print('x-x-x-x-x-x-x-x')
+        print()
 
-np.savez(f'ham_data/tfim_ham_{N}q_j{J}_h{h}.npz', **ham)
-
-ham = np.load(f"ham_data/tfim_ham_{N}q_j{J}_h{h}.npz")
-
-# print
-
-hamiltonian, eigvals = ham['hamiltonian'], ham['eigvals']
-
-print(hamiltonian, eigvals)
-# print(H)
-
+if __name__ == "__main__":
+    hamitlonian_contruct_with_hardness()
