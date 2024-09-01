@@ -8,7 +8,7 @@ from collections import namedtuple, deque
 import numpy as np
 from itertools import product
 
-from utils import dictionary_of_actions, dict_of_actions_revert_q
+from utils import *
 
 
 class DQN(object):
@@ -26,6 +26,7 @@ class DQN(object):
         neuron_list = conf['agent']['neurons']
         drop_prob = conf['agent']['dropout']
         self.with_angles = conf['agent']['angles']
+        self.decomposed = int(conf['env']['decomposed'])
         
         if "memory_reset_switch" in conf['agent'].keys():
             self.memory_reset_switch =  conf['agent']["memory_reset_switch"]
@@ -43,8 +44,12 @@ class DQN(object):
         self.state_size = self.state_size + 1 if conf['agent']['en_state'] else self.state_size
         self.state_size = self.state_size + 1 if ("threshold_in_state" in conf['agent'].keys() and conf['agent']["threshold_in_state"]) else self.state_size
 
-        self.translate = dictionary_of_actions(self.num_qubits)
-        self.rev_translate = dict_of_actions_revert_q(self.num_qubits)
+        if self.decomposed:
+            self.translate = dictionary_of_actions_decomposed(self.num_qubits)
+            self.rev_translate = dict_of_actions_revert_q_decomposed(self.num_qubits)
+        else:
+            self.translate = dictionary_of_actions(self.num_qubits)
+            self.rev_translate = dict_of_actions_revert_q(self.num_qubits)
         self.policy_net = self.unpack_network(neuron_list, drop_prob).to(device)
         self.target_net = copy.deepcopy(self.policy_net)
         self.target_net.eval()

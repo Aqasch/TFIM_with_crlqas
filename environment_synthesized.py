@@ -12,6 +12,7 @@ import curricula
 import copy
 import time
 from qiskit import QuantumCircuit
+from synthesized_gates import *
 
 class CircuitEnv():
 
@@ -56,10 +57,13 @@ class CircuitEnv():
         self.noise_flag = True
         self.state_with_angles = conf['agent']['angles']
         self.current_number_of_cnots = 0
+        self.synthesized = 1
         
 
         if self.decomposed:
             self.action_dict = dictionary_of_actions_decomposed(self.num_qubits)
+        elif self.synthesized:
+            self.action_dict = dictionary_of_actions_synthesized(self.num_qubits)
         else:
             self.action_dict = dictionary_of_actions(self.num_qubits)
 
@@ -89,7 +93,7 @@ class CircuitEnv():
 
         stdout.flush()
         if self.decomposed:
-            self.state_size = self.num_layers*self.num_qubits*(self.num_qubits+3+3)
+            self.state_size = self.num_layers*self.num_qubits*(2*self.num_qubits+3+3)
         else:
             self.state_size = self.num_layers*self.num_qubits*(self.num_qubits+3+3)
         self.step_counter = -1
@@ -100,6 +104,8 @@ class CircuitEnv():
         self.opt_ang_save = 0
 
         if self.decomposed:
+            self.action_size = len(list(combinations(range(self.num_qubits), 2))) + self.num_qubits*3
+        elif self.synthesized:
             self.action_size = len(list(combinations(range(self.num_qubits), 2))) + self.num_qubits*3
         else:
             self.action_size = (self.num_qubits*(self.num_qubits+2))

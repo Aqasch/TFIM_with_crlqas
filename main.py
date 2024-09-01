@@ -28,7 +28,8 @@ class Saver:
                                                  'bond_distance': 0,
                                                  'nfev': [], 
                                                  'opt_ang': [],
-                                                 'time' : []
+                                                 'time' : [],
+                                                'save_circ' : []
                                                  }
         elif mode == 'test':
             self.stats_file[mode][episode_no] = {'actions': [],
@@ -133,6 +134,8 @@ def one_episode(episode_no, env, agent, episodes):
         assert type(env.error) == float
         agent.saver.stats_file['train'][episode_no]['errors'].append(env.error)
         agent.saver.stats_file['train'][episode_no]['errors_noiseless'].append(env.error_noiseless)
+        agent.saver.stats_file['train'][episode_no]['opt_ang'].append(env.opt_ang_save)
+        agent.saver.stats_file['train'][episode_no]['save_circ'].append(env.save_circ)
         
         agent.saver.stats_file['train'][episode_no]['time'].append(time.time()-t0)
 
@@ -197,8 +200,8 @@ if __name__ == '__main__':
 
     results_path ="results/"
     pathlib.Path(f"{results_path}{args.experiment_name}{args.config}").mkdir(parents=True, exist_ok=True)
-    # device = torch.device(f"cuda:{args.gpu_id}")
-    device = torch.device(f"cpu:0")
+    device = torch.device(f"cuda:{args.gpu_id}")
+    # device = torch.device(f"cpu:0")
     
     
     conf = get_config(args.experiment_name, f'{args.config}.cfg')

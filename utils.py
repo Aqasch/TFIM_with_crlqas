@@ -1,33 +1,7 @@
 import configparser
-import numpy as np 
-# from chemical_hamiltonians import qiskit_LiH_chem, convert_from_qiskit, qiskit_H2_chem, paulis2matrices
 import json
-from itertools import product
-from qulacs import Observable
-
-
-
-def gen_hamiltonian(num_qubits, conf, taper=True, exact_en=False):
-    if conf["ham_type"] == 'LiH':        
-        paulis, paulis_qulacs, weights, energies, shift = qiskit_LiH_chem(conf["geometry"], conf["taper"], exact_en, conf["mapping"])
-      
-
-        ham = paulis2matrices(paulis)
-        tmp = [weights[i]* ham[i] for i in range(len(paulis))]
-        hamiltonian = np.sum(tmp, axis=0)
-        
-        return hamiltonian,weights,  energies, shift
-    elif conf["ham_type"] == 'H2':
-        
-        paulis, paulis_qulacs, weights, shift = qiskit_H2_chem(conf["geometry"])
-
-        
-        ham = paulis2matrices(paulis)
-        tmp = [weights[i]* ham[i] for i in range(len(paulis))]
-        hamiltonian = np.sum(tmp, axis=0)
-        eigvals, eigvecs = np.linalg.eig(hamiltonian)
-        return hamiltonian, weights, eigvals.real, shift
-
+from itertools import product, combinations
+from qiskit import QuantumCircuit
 
 
 def get_config(config_name,experiment_name, path='configuration_files',
@@ -82,7 +56,60 @@ def dictionary_of_actions(num_qubits):
         dictionary[i] = [num_qubits, 0, r, h]
         i += 1
     return dictionary
-        
+
+def dictionary_of_actions_decomposed(num_qubits):
+    """
+    Creates dictionary of actions for system which steers positions of gates,
+    and axes of rotations.
+    """
+    dictionary = dict()
+    i = 0
+         
+    for c in range(num_qubits):
+        for x in range(c + 1, num_qubits):
+            dictionary[i] = [c, x, num_qubits, 0]
+            i += 1
+   
+    """h  denotes which gate. 1, 2, 3 -->  SX, X, RZ axes """
+    for r, h in product(range(num_qubits),
+                           range(1, 4)):
+        dictionary[i] = [num_qubits, 0, r, h]
+        i += 1
+    return dictionary
+
+def dictionary_of_actions_synthesized(num_qubits):
+    """
+    Creates dictionary of actions for system which steers positions of gates,
+    and axes of rotations.
+    """
+    dictionary = dict()
+    i = 0
+    """c is the control and (c+x) % num_qubits is the target of RZCZ"""    
+    for c, x in product(range(num_qubits),
+                        range(1, num_qubits)):
+        dictionary[i] =  [c, x, num_qubits, 0, num_qubits, 0]
+        i += 1
+    
+    """c is the control and (c+x) % num_qubits is the target of CZ"""
+    for c in range(num_qubits):
+        for x in range(c + 1, num_qubits):
+            dictionary[i] = [num_qubits, 0, c, x, num_qubits, 0]
+            i += 1
+   
+    """h  denotes which gate. 1, 2, 3 -->  SX, X, RZ axes """
+    for r, h in product(range(num_qubits),
+                           range(1, 4)):
+        dictionary[i] = [num_qubits, 0, num_qubits, 0, r, h]
+        i += 1
+    return dictionary
+
+num_qubits = 4
+x = dictionary_of_actions_synthesized(num_qubits)
+print(x)
+
+
+
+
 def dict_of_actions_revert_q(num_qubits):
     """
     Creates dictionary of actions for system which steers positions of gates,
@@ -96,31 +123,38 @@ def dict_of_actions_revert_q(num_qubits):
         dictionary[i] =  [c, x, num_qubits, 0]
         i += 1
    
+    """h  denotes rotation axis. 1, 2, 3 -->  SX, X, RZ axes """
+    for r, h in product(range(num_qubits-1,-1,-1),
+                           range(1, 4)):
+        dictionary[i] = [num_qubits, 0, r, h]
+        i += 1
+    return dictionary
+
+def dict_of_actions_revert_q_decomposed(num_qubits):
+    """
+    Creates dictionary of actions for system which steers positions of gates,
+    and axes of rotations. Systems have reverted order to above dictionary of actions.
+    """
+    dictionary = dict()
+    i = 0
+         
+    for c in range(num_qubits):
+        for x in range(c + 1, num_qubits):
+            dictionary[i] = [c, x, num_qubits, 0]
+            i += 1
+   
     """h  denotes rotation axis. 1, 2, 3 -->  X, Y, Z axes """
     for r, h in product(range(num_qubits-1,-1,-1),
                            range(1, 4)):
         dictionary[i] = [num_qubits, 0, r, h]
         i += 1
     return dictionary
-        
 
-if __name__ == '__main__':
-    from dataclasses import dataclass
-    
-    @dataclass
-    class Config:
-        num_qubits = 4
-        problem={"ham_type" : 'H2',
-        "geometry" : 'H .0 .0 +.35; H .0 .0 -.35',
-        "taper" : 0,
-        "mapping" : 'jordan_wigner'}
+# for q in range(2,10):
+#     combo = list(combinations(range(q), 2))
+#     print(q, len(dictionary_of_actions_decomposed(q).keys()), len(combo) + q*3, len(dictionary_of_actions(q).keys()))
 
-        
-    __ham = dict()    
-    
-    __ham['hamiltonian'], __ham['weights'], __ham['eigvals'], __ham['energy_shift'] = gen_hamiltonian(Config.num_qubits, Config.problem)
-    __geometry = Config.problem['geometry'].replace(" ", "_")
-    print(np.min(__ham['eigvals'].real) + __ham['energy_shift'])
-    exit()
-    np.savez(f"mol_data/LiH_{Config.num_qubits}q_geom_{__geometry}_{Config.problem['mapping']}",**__ham)
+#     print()
+   
+
    

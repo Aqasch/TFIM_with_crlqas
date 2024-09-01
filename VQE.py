@@ -6,6 +6,8 @@ import numpy as np
 from typing import List, Callable, Optional, Dict
 
 from scipy.optimize import OptimizeResult
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 
 
 
@@ -14,24 +16,12 @@ from scipy.optimize import OptimizeResult
 class Parametric_Circuit:
     def __init__(self,n_qubits,noise_models = [],noise_values = []):
         self.n_qubits = n_qubits
-        self.noise_models = noise_models
-        self.noise_values = noise_values
-        self.ansatz = ParametricQuantumCircuit(n_qubits)
-
-        
+        self.ansatz = QuantumCircuit(n_qubits)
 
     def construct_ansatz(self, state):
+        # print('--------------')
+        # print(state[:3])
         
-        if len(self.noise_models) == 1:
-            
-            channels_1 = get_noise_channels(self.noise_models[0], self.n_qubits, self.noise_values[0])
-        elif len(self.noise_models) == 2:
-            channels_1 = get_noise_channels(self.noise_models[0],self.n_qubits,self.noise_values[0])
-        elif len(self.noise_models) == 3:
-            channels_1 = get_noise_channels(self.noise_models[0],self.n_qubits,self.noise_values[0])
-            channels_3 = get_noise_channels(self.noise_models[2],self.n_qubits,self.noise_values[2])
-        
-
         for _, local_state in enumerate(state):
             
             thetas = local_state[self.n_qubits+3:]
@@ -43,37 +33,55 @@ class Parametric_Circuit:
 
             if len(ctrl) != 0:
                 for r in range(len(ctrl)):
-                    self.ansatz.add_gate(CNOT(ctrl[r], targ[r]))
-
-                    if len(self.noise_models) >= 2:
-                        
-                        self.ansatz.add_gate(TwoQubitDepolarizingNoise(ctrl[r], targ[r], self.noise_values[1]) )
+                    self.ansatz.cx([ctrl[r].item()], [targ[r].item()])
             
             rot_direction_list = rot_pos[0]
             rot_qubit_list = rot_pos[1]
-
-
             if len(rot_qubit_list) != 0:
                 for pos, r in enumerate(rot_direction_list):
                     rot_qubit = rot_qubit_list[pos]
-                    
                     if r == 0:
-                        self.ansatz.add_parametric_RX_gate(rot_qubit, thetas[0][rot_qubit])
+                        self.ansatz.rx(thetas[0][rot_qubit].item(), rot_qubit.item())
                     elif r == 1:
-                        self.ansatz.add_parametric_RY_gate(rot_qubit, thetas[1][rot_qubit])
+                        self.ansatz.ry(thetas[1][rot_qubit].item(), rot_qubit.item())
                     elif r == 2:
-                        self.ansatz.add_parametric_RZ_gate(rot_qubit,  thetas[2][rot_qubit])
+                        self.ansatz.rz(thetas[2][rot_qubit].item(), rot_qubit.item())
                     else:
-                        print('baler angle! lagabo na!')
-                    
-                    if len(self.noise_values) >= 1 and len(self.noise_values) <3 :
-                        self.ansatz.add_gate(channels_1[rot_qubit])
-                    elif len(self.noise_values) > 2:
-                        self.ansatz.add_gate(channels_1[rot_qubit])
-                        self.ansatz.add_gate(channels_3[rot_qubit])
-                        
-
+                        print(f'rot-axis = {r} is in invalid')
+                        assert r >2                       
+        return self.ansatz
+    
+    def construct_ansatz_decomposed(self, state):
+        # print('--------------')
+        # print(state[:3])
         
+        for _, local_state in enumerate(state):
+            
+            thetas = local_state[self.n_qubits+3:]
+            rot_pos = (local_state[self.n_qubits: self.n_qubits+3] == 1).nonzero( as_tuple = True )
+            cnot_pos = (local_state[:self.n_qubits] == 1).nonzero( as_tuple = True )
+            # print(rot_pos, 'this!!!')
+            targ = cnot_pos[0]
+            ctrl = cnot_pos[1]
+
+            if len(ctrl) != 0:
+                for r in range(len(ctrl)):
+                    self.ansatz.cz([ctrl[r].item()], [targ[r].item()])
+            
+            rot_direction_list = rot_pos[0]
+            rot_qubit_list = rot_pos[1]
+            if len(rot_qubit_list) != 0:
+                for pos, r in enumerate(rot_direction_list):
+                    rot_qubit = rot_qubit_list[pos]
+                    if r == 0:
+                        self.ansatz.sx(rot_qubit.item())
+                    elif r == 1:
+                        self.ansatz.x(rot_qubit.item())
+                    elif r == 2:
+                        self.ansatz.rz(thetas[2][rot_qubit].item(), rot_qubit.item())
+                    else:
+                        print(f'rot-axis = {r} is in invalid')
+                        assert r >2                       
         return self.ansatz
 
         
@@ -101,35 +109,21 @@ def get_energy_qulacs_(angles, observable,
     expval [float] : expectation value 
     
     """
-        
-    parameter_count_qulacs = circuit.get_parameter_count()
+    # print(angles)
+    # print(circuit)
+    no = 0
+    for i in circuit:
+        gate_detail = list(i)[0]
+        if gate_detail.name in ['rx', 'ry', 'rz']:
+            list(i)[0].params = [angles[no]]
+            no+=1
+    # print(circuit)
     
-    if not list(which_angles):
-            which_angles = np.arange(parameter_count_qulacs)
-    
-    for i, j in enumerate(which_angles):
-        circuit.set_parameter(j, angles[i])
-        
+    state = np.asmatrix(Statevector.from_instruction(circuit))
+# state = state.getH() @ state
+    energy = (state @ observable) @ state.getH()
 
-
-
-    
-
-    if noise_value == 0:
-        M=1        
-
-    expval = get_exp_val(n_qubits,circuit,observable,M)
-    
-    shot_noise = 0
-    
-    if n_shots > 0:
-        weights1, weights2 = weights[np.abs(weights) > 0.05], weights[np.abs(weights) <= 0.05]
-        mu,sigma1,sigma2=0,(10*n_shots)**(-0.5), (n_shots)**(-0.5)
-        
-        shot_noise+=(np.array(weights1).real).T@np.random.normal(mu,sigma1,len(weights1))
-        shot_noise+=(np.array(weights2).real).T@np.random.normal(mu,sigma2,len(weights2))
-
-    return expval + shot_noise + energy_shift
+    return float(energy.real)#[0][0]
 
 
 def get_energy_qulacs(angles, observable,circuit, n_qubits, n_shots,
@@ -151,21 +145,24 @@ def get_energy_qulacs(angles, observable,circuit, n_qubits, n_shots,
     expval [float] : expectation value 
     
     """
-        
-    parameter_count_qulacs = circuit.get_parameter_count()
-    
-    if not list(which_angles):
-            which_angles = np.arange(parameter_count_qulacs)
-    
-    for i, j in enumerate(which_angles):
-        circuit.set_parameter(j, angles[i])
-          
+    # print(angles)
+    # print(circuit, 'before')
 
-    expval = get_exp_val(n_qubits,circuit,observable, phys_noise)
+    no = 0
+    for i in circuit:
+        gate_detail = list(i)[0]
+        if gate_detail.name in ['rx', 'ry', 'rz']:
+            # print(angles, no)
+            list(i)[0].params = [angles[no]]
+            no+=1
+    # print(circuit, 'after')
+    # print('-x-x-x-x-x-')
+    # print()
     
-    shot_noise = 0 #get_shot_noise(weights, n_shots) 
+    state = np.asmatrix(Statevector.from_instruction(circuit))
+    energy = (state @ observable) @ state.getH()
 
-    return expval + shot_noise
+    return float(energy.real)#[0][0]
 
 def get_shot_noise(weights, n_shots):
     
@@ -179,37 +176,16 @@ def get_shot_noise(weights, n_shots):
         shot_noise +=(np.array(weights2).real).T@np.random.normal(mu,sigma2,len(weights2))
         
     return shot_noise
-
-
-
-
-
-
-
-
-
-
         
 
 
 def get_exp_val(n_qubits,circuit,op, phys_noise = False, err_mitig = 0):
-    
-    expval = 0
-    if phys_noise == False:
-        state = QuantumState(n_qubits)
-        circuit.update_quantum_state(state)
-        psi = state.get_vector()
-        expval += (np.conj(psi).T @ op @ psi).real
-    else:
-        dm = DensityMatrix(n_qubits)
-        circuit.update_quantum_state(dm)
-        rho = dm.get_matrix()
-        if err_mitig == 0:
-            expval += np.real( np.trace(op @ rho) )
-        else:
-            expval += np.real( np.trace(op @ rho @ rho) / np.trace(rho @ rho))
-        
-    return expval
+            
+    state = np.asmatrix(Statevector.from_instruction(circuit))
+    # print(state.shape)
+    energy = (state @ op) @ state.getH()
+
+    return float(energy.real)
 
 def get_noise_channels(model_name, n_qubits, error_prob):
     if model_name == "depolarizing":
