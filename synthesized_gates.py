@@ -1,13 +1,13 @@
 from qiskit import *
 
-def rzcz(theta):
+def rzcz(theta, ctrl, targ):
     '''
     ------[RZ(ctrl)]----o(ctrl)----
                         |
                         |
     --------------------o----------
     '''
-    circ = QuantumCircuit(2, name="rzcz_gate")
+    circ = QuantumCircuit(2, name=f"rzcz{ctrl}{targ}")
     circ.ry(theta, 0)
     circ.cz(0, 1)
     circ = circ.to_gate()
