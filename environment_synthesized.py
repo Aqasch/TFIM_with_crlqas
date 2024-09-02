@@ -1,16 +1,13 @@
-
-
 import torch
-from utils import *
+from utils_synthesized import *
 from sys import stdout
 import scipy
-import VQE as vc
+import VQE_synthesized as vc
 import os
 import numpy as np
 import copy
 import curricula
 import copy
-import time
 from qiskit import QuantumCircuit
 from synthesized_gates import *
 
@@ -57,15 +54,10 @@ class CircuitEnv():
         self.noise_flag = True
         self.state_with_angles = conf['agent']['angles']
         self.current_number_of_cnots = 0
-        self.synthesized = 1
+        # self.synthesized = 1 # MAKE IT A VARIABLE IN CONFIG!!!
         
 
-        if self.decomposed:
-            self.action_dict = dictionary_of_actions_decomposed(self.num_qubits)
-        elif self.synthesized:
-            self.action_dict = dictionary_of_actions_synthesized(self.num_qubits)
-        else:
-            self.action_dict = dictionary_of_actions(self.num_qubits)
+        self.action_dict = dictionary_of_actions_synthesized(self.num_qubits)
 
         
         print(f"ham_data/{self.ham_type}_{self.ham_model}.npz")
@@ -92,10 +84,8 @@ class CircuitEnv():
         
 
         stdout.flush()
-        if self.decomposed:
-            self.state_size = self.num_layers*self.num_qubits*(2*self.num_qubits+3+3)
-        else:
-            self.state_size = self.num_layers*self.num_qubits*(self.num_qubits+3+3)
+        
+        self.state_size = self.num_layers*self.num_qubits*(self.num_qubits+3+self.num_qubits+3)
         self.step_counter = -1
         self.prev_energy = None
         self.moments = [0]*self.num_qubits
@@ -103,12 +93,7 @@ class CircuitEnv():
         self.energy = 0
         self.opt_ang_save = 0
 
-        if self.decomposed:
-            self.action_size = len(list(combinations(range(self.num_qubits), 2))) + self.num_qubits*3
-        elif self.synthesized:
-            self.action_size = len(list(combinations(range(self.num_qubits), 2))) + self.num_qubits*3
-        else:
-            self.action_size = (self.num_qubits*(self.num_qubits+2))
+        self.action_size = len(list(combinations(range(self.num_qubits), 2)))+self.num_qubits*2+self.num_qubits**2
         # print(self.action_size)
         self.previous_action = [0, 0, 0, 0, 0, 0]
         self.save_circ = 0
@@ -151,8 +136,6 @@ class CircuitEnv():
         
         """
         Action is performed on the first empty layer.
-        
-        
         Variable 'step_counter' points last non-empty layer.
         """  
         
@@ -161,38 +144,85 @@ class CircuitEnv():
         self.step_counter += 1
 
         """
-        First two elements of the 'action' vector describes position of the CNOT gate.
-        Position of rotation gate and its axis are described by action[2] and action[3].
-        When action[0] == num_qubits, then there is no CNOT gate.
-        When action[2] == num_qubits, then there is no Rotation gate.
-        """
-        
-        ctrl = action[0]
-        if self.decomposed:
-            targ = action[1]
-        else:
-            targ = (action[0] + action[1]) % self.num_qubits
-        rot_qubit = action[2]
-        rot_axis = action[3]
+        The state looks like 
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
 
+        AFTER MODIFICATION
+
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZ (angle)
+
+        THE TODO:   Change the whole code as per the modified encoding!
+        """
+
+        
+        ctrl1 = action[0] # CONTROL FOR CZ
+        targ1 = action[1] # TARGET FOR CZ
+        ctrl2 = action[2] # CONTROL FOR RZCZ
+        targ2 = (action[2] + action[3]) % self.num_qubits # TARGET FOR RZCZ
+
+        rot_qubit = action[4]
+        rot_axis = action[5]
         self.action = action
 
         if rot_qubit < self.num_qubits:
             gate_tensor = self.moments[ rot_qubit ]
-        elif ctrl < self.num_qubits:
-            gate_tensor = max( self.moments[ctrl], self.moments[targ] )
+        elif ctrl1 < self.num_qubits:
+            gate_tensor = max( self.moments[ctrl1], self.moments[targ1] )
+        elif ctrl2 < self.num_qubits:
+            gate_tensor = max( self.moments[ctrl2], self.moments[targ2] )
 
-        if ctrl < self.num_qubits:
-            next_state[gate_tensor][targ][ctrl] = 1
+        # print('ROTATION POSITION AND QUBIT')
+        # print(self.num_qubits+rot_axis-1, rot_axis, rot_qubit )
+        # CZ GATE APPEND
+        if ctrl1 < self.num_qubits:
+            next_state[gate_tensor][targ1][ctrl1] = 1
+        
+        # MOD 1q GATE APPEND (THE LAST ROW IS RZ)
         elif rot_qubit < self.num_qubits:
             next_state[gate_tensor][self.num_qubits+rot_axis-1][rot_qubit] = 1
+        
+        # MOD RZCZ GATE APPEND
+        elif ctrl2 < self.num_qubits:
+            next_state[gate_tensor][targ2+self.num_qubits+3][ctrl2] = 1
+
+        """
+        # RZCZ GATE APPEND
+        elif ctrl2 < self.num_qubits:
+            next_state[gate_tensor][targ2+self.num_qubits][ctrl2] = 1
+        
+        # 1q GATES APPEND
+        elif rot_qubit < self.num_qubits:
+            next_state[gate_tensor][2*self.num_qubits+rot_axis-1][rot_qubit] = 1
+        """
 
         if rot_qubit < self.num_qubits:
             self.moments[ rot_qubit ] += 1
-        elif ctrl < self.num_qubits:
-            max_of_two_moments = max( self.moments[ctrl], self.moments[targ] )
-            self.moments[ctrl] = max_of_two_moments +1
-            self.moments[targ] = max_of_two_moments +1
+        elif ctrl1 < self.num_qubits:
+            max_of_two_moments = max( self.moments[ctrl1], self.moments[targ1] )
+            self.moments[ctrl1] = max_of_two_moments +1
+            self.moments[targ1] = max_of_two_moments +1
+        elif ctrl2 < self.num_qubits:
+            max_of_two_moments = max( self.moments[ctrl2], self.moments[targ2] )
+            self.moments[ctrl2] = max_of_two_moments +1
+            self.moments[targ2] = max_of_two_moments +1
             
         self.current_action = action
         self.illegal_action_new()
@@ -200,7 +230,7 @@ class CircuitEnv():
             thetas, _, opt_ang = self.scipy_optim(self.optim_alg)
             for i in range(self.num_layers):
                 for j in range(3):
-                    next_state[i][self.num_qubits+3+j,:] = thetas[i][j,:]
+                    next_state[i][self.num_qubits+3+self.num_qubits+j,:] = thetas[i][j,:]
         self.opt_ang_save = opt_ang
         self.state = next_state.clone()
         
@@ -227,11 +257,10 @@ class CircuitEnv():
         done = int(energy_done or layers_done)
         
         self.previous_action = copy.deepcopy(action)
-        if self.decomposed:
-            self.save_circ = self.make_circuit_decomposed()
-        else:
-            self.save_circ = self.make_circuit()
+        self.save_circ = self.make_circuit_decomposed()
+        # print(self.state)
         # print(self.save_circ)
+        # print('---------')
         
 
         if self.random_halt:
@@ -245,7 +274,7 @@ class CircuitEnv():
         if self.state_with_angles:
             return next_state.view(-1).to(self.device), torch.tensor(rwd, dtype=torch.float32, device=self.device), done
         else:
-            next_state = next_state[:, :self.num_qubits+3]
+            next_state = next_state[:, :self.num_qubits+3+self.num_qubits]
             return next_state.reshape(-1).to(self.device), torch.tensor(rwd, dtype=torch.float32, device=self.device), done
 
     def reset(self):
@@ -259,13 +288,8 @@ class CircuitEnv():
             then this means empty slot, gate does not exist (we do not
             append it in circuit creator)
         """
-        
 
-
-        if self.decomposed:
-            state = torch.zeros((self.num_layers, self.num_qubits+3+3, self.num_qubits))
-        else:
-           state = torch.zeros((self.num_layers, self.num_qubits+3+3, self.num_qubits))
+        state = torch.zeros((self.num_layers, self.num_qubits+3+self.num_qubits+3, self.num_qubits))
 
         self.state = state
         
@@ -277,13 +301,10 @@ class CircuitEnv():
 
         
         self.current_number_of_cnots = 0
-        self.current_action = [self.num_qubits]*4
+        self.current_action = [self.num_qubits]*6
         self.illegal_actions = [[]]*self.num_qubits
 
-        if self.decomposed:
-            self.make_circuit_decomposed(state)
-        else:
-            self.make_circuit(state)
+        self.make_circuit_decomposed(state)
         self.step_counter = -1
         # print(self.save_circ)
         
@@ -300,85 +321,85 @@ class CircuitEnv():
         if self.state_with_angles:
             return state.reshape(-1).to(self.device)
         else:
-            state = state[:, :self.num_qubits+3]
+            state = state[:, :self.num_qubits+3+self.num_qubits]
             return state.reshape(-1).to(self.device)
 
     def make_circuit_decomposed(self, thetas=None):
         """
-        based on the angle of first rotation gate we decide if any rotation at
-        a given qubit is present i.e.
-        if thetas[0, i] == 0 then there is no rotation gate on the Control quibt
-        if thetas[1, i] == 0 then there is no rotation gate on the NOT quibt
-        CNOT gate have priority over rotations when both will be present in the given slot
+        THE PREVIOUS ENCODING
+
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZ (angle)
+
+        AFTER MODIFICATION!!
+
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZ (angle)
+
         """
         state = self.state.clone()
         if thetas is None:
-            thetas = state[:, self.num_qubits+3:]
+            thetas = state[:, self.num_qubits+3+self.num_qubits:]
         
         circuit = QuantumCircuit(self.num_qubits)
         for i in range(self.num_layers):
+            """
+            OLDS!
+            czrz_pos = np.where(state[i][0:self.num_qubits] == 1)
+            cz_pos = np.where(state[i][self.num_qubits:2*self.num_qubits] == 1)
+            rot_pos = np.where(state[i][2*self.num_qubits: 2*self.num_qubits+3] == 1)
+            """
+
+            # mod cz position extraction!
+            cz_pos = np.where(state[i][0:self.num_qubits] == 1)
+            # rotation position extration
+            oneq_gate_pos = np.where(state[i][self.num_qubits: self.num_qubits+3] == 1)
+            # mod rzcz extration
+            rzcz_pos = np.where(state[i][self.num_qubits+3: self.num_qubits+3+self.num_qubits] == 1)
+             
             
-            cnot_pos = np.where(state[i][0:self.num_qubits] == 1)
-            targ = cnot_pos[0]
-            ctrl = cnot_pos[1]
+            # print(thetas)
+            # print(rot_pos)
+
+            # cz append
+            targ_cz = cz_pos[0]
+            ctrl_cz = cz_pos[1]
+            if len(ctrl_cz) != 0:
+                for r in range(len(ctrl_cz)):
+                    circuit.cz([ctrl_cz[r]], [targ_cz[r]])
             
-            if len(ctrl) != 0:
-                for r in range(len(ctrl)):
-                    circuit.cz([ctrl[r]], [targ[r]])
+            targ_rzcz = rzcz_pos[0]
+            ctrl_rzcz = rzcz_pos[1]
+            if len(ctrl_rzcz) != 0:
+                for r in range(len(ctrl_rzcz)):
+                    circuit.append(rzcz(thetas[i][targ_rzcz[r]][ctrl_rzcz[r]].item(), ctrl=ctrl_rzcz[r], targ=targ_rzcz[r]), [ctrl_rzcz[r], targ_rzcz[r]])
+            
+            
                   
-            rot_pos = np.where(state[i][self.num_qubits: self.num_qubits+3] == 1)
-            rot_direction_list, rot_qubit_list = rot_pos[0], rot_pos[1]
+            rot_direction_list, rot_qubit_list = oneq_gate_pos[0], oneq_gate_pos[1]
             if len(rot_qubit_list) != 0:
                 for pos, r in enumerate(rot_direction_list):
                     rot_qubit = rot_qubit_list[pos]
-                    # print(rot_qubit)
                     if r == 0:
                         circuit.sx(rot_qubit)
                     elif r == 1:
                         circuit.x(rot_qubit)
-                    elif r == 2:
-                        # print(thetas[i][0][rot_qubit])
-
-                        circuit.rz(thetas[i][2][rot_qubit].item(), rot_qubit)
-                    else:
-                        print(f'rot-axis = {r} is in invalid')
-                        assert r >2
-        return circuit
-
-    def make_circuit(self, thetas=None):
-        """
-        based on the angle of first rotation gate we decide if any rotation at
-        a given qubit is present i.e.
-        if thetas[0, i] == 0 then there is no rotation gate on the Control quibt
-        if thetas[1, i] == 0 then there is no rotation gate on the NOT quibt
-        CNOT gate have priority over rotations when both will be present in the given slot
-        """
-        state = self.state.clone()
-        if thetas is None:
-            thetas = state[:, self.num_qubits+3:]
-        
-        circuit = QuantumCircuit(self.num_qubits)
-        for i in range(self.num_layers):
-            
-            cnot_pos = np.where(state[i][0:self.num_qubits] == 1)
-            targ = cnot_pos[0]
-            ctrl = cnot_pos[1]
-            
-            if len(ctrl) != 0:
-                for r in range(len(ctrl)):
-                    circuit.cx([ctrl[r]], [targ[r]])
-                  
-            rot_pos = np.where(state[i][self.num_qubits: self.num_qubits+3] == 1)
-            rot_direction_list, rot_qubit_list = rot_pos[0], rot_pos[1]
-            
-            if len(rot_qubit_list) != 0:
-                for pos, r in enumerate(rot_direction_list):
-                    rot_qubit = rot_qubit_list[pos]
-                    # print(rot_qubit)
-                    if r == 0:
-                        circuit.rx(thetas[i][0][rot_qubit].item(), rot_qubit)
-                    elif r == 1:
-                        circuit.ry(thetas[i][1][rot_qubit].item(), rot_qubit)
                     elif r == 2:
                         circuit.rz(thetas[i][2][rot_qubit].item(), rot_qubit)
                     else:
@@ -389,17 +410,11 @@ class CircuitEnv():
 
     def get_energy(self, thetas=None):
         
-        if self.decomposed:
-            circ = self.make_circuit_decomposed(thetas)
-        else:
-            circ = self.make_circuit(thetas)
-        qulacs_inst = vc.Parametric_Circuit(n_qubits = self.num_qubits, noise_models = self.noise_models, noise_values = self.noise_values)
+        circ = self.make_circuit_decomposed(thetas)
+        qiskit_inst = vc.Parametric_Circuit(n_qubits = self.num_qubits, noise_models = self.noise_models, noise_values = self.noise_values)
         
-        if self.decomposed:
-            noisy_circ = qulacs_inst.construct_ansatz_decomposed(self.state)
-
-        else:
-            noisy_circ = qulacs_inst.construct_ansatz(self.state)
+        # print(circ)
+        noisy_circ = qiskit_inst.construct_ansatz_decomposed(self.state)
         # print(noisy_circ)
         expval_noisy = vc.get_exp_val(self.num_qubits,noisy_circ,self.hamiltonian,self.phys_noise,self.err_mitig)
         
@@ -416,44 +431,75 @@ class CircuitEnv():
 
         
     def scipy_optim(self, method, which_angles = [] ):
+        """
+        The state looks like 
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
+
+        AFTER MODIFICATION
+
+        [0., 0.], - The CZ
+        [0., 0.], - The CZ
+        [0., 0.], - The SX
+        [0., 0.], - The X
+        [0., 0.], - The RZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZ (angle)
+
+        THE TODO:   Move "The RZCZ" after "The X" so that you can directly extract the rotation position
+                    and the angles.
+        """
         state = self.state.clone()
-        thetas = state[:, self.num_qubits+3:]
-        if self.decomposed:
-            rot_pos = (state[:,self.num_qubits: self.num_qubits+3] == 1).nonzero( as_tuple = True )
-        else:
-            rot_pos = (state[:,self.num_qubits: self.num_qubits+3] == 1).nonzero( as_tuple = True )
-        # print(rot_pos)
-        angles = thetas[rot_pos]
+        thetas = state[:, self.num_qubits+3+self.num_qubits:]
+        rot_pos = (state[:,self.num_qubits+2: self.num_qubits+2+3] == 1).nonzero( as_tuple = True )
+        # print('state')
+        # print(state)
+        # print('EXAMINING!')
+        # print(state[:,self.num_qubits+2: self.num_qubits+2+3])
+        # print('thetas')
         # print(thetas)
-        # print(angles.shape, 'the angles!')
-
-
-        qulacs_inst = vc.Parametric_Circuit(n_qubits=self.num_qubits,noise_models=self.noise_models,noise_values = self.noise_values)
-        if self.decomposed:
-            qulacs_circuit = qulacs_inst.construct_ansatz_decomposed(state)
-        else: 
-            qulacs_circuit = qulacs_inst.construct_ansatz(state)
+        # print('rot pos')
+        # print(rot_pos)
+        # print('------------')
+        # print(thetas[rot_pos[0]])
+        angles = thetas[rot_pos]
+        # angles = thetas[rot_pos2]
+        # print('the angles')
+        # print(angles)
+        qiskit_inst = vc.Parametric_Circuit(n_qubits=self.num_qubits,noise_models=self.noise_models,noise_values = self.noise_values)
+        
+        qiskit_circuit = qiskit_inst.construct_ansatz_decomposed(state)
         
         x0 = np.asarray(angles.cpu().detach())
 
         def cost(x):
-            return vc.get_energy_qulacs(x, observable = self.hamiltonian, circuit = qulacs_circuit,
+            return vc.get_energy_qiskit(x, observable = self.hamiltonian, circuit = qiskit_circuit,
             n_qubits = self.num_qubits,
             n_shots = int(self.n_shots), phys_noise = self.phys_noise,
                       which_angles=[])
 
         if list(which_angles):
-            result_min_qulacs = scipy.optimize.minimize(cost, x0 = x0[which_angles], method = method, options = {'maxiter':self.global_iters})
-            x0[which_angles] = result_min_qulacs['x']
-            thetas = state[:, self.num_qubits+3:]
+            result_min_qiskit = scipy.optimize.minimize(cost, x0 = x0[which_angles], method = method, options = {'maxiter':self.global_iters})
+            x0[which_angles] = result_min_qiskit['x']
+            thetas = state[:, self.num_qubits+3+self.num_qubits:]
             thetas[rot_pos] = torch.tensor(x0, dtype=torch.float)
         else:
-            result_min_qulacs = scipy.optimize.minimize(cost, x0 = x0, method = method, options = {'maxiter':self.global_iters})
-            thetas = state[:, self.num_qubits+3:]
-            thetas[rot_pos] = torch.tensor(result_min_qulacs['x'], dtype=torch.float)
-        # print(thetas)
+            result_min_qiskit = scipy.optimize.minimize(cost, x0 = x0, method = method, options = {'maxiter':self.global_iters})
+            thetas = state[:, self.num_qubits+3+self.num_qubits:]
+            thetas[rot_pos] = torch.tensor(result_min_qiskit['x'], dtype=torch.float)
 
-        return thetas, result_min_qulacs['nfev'], result_min_qulacs['x']
+        return thetas, result_min_qiskit['nfev'], result_min_qiskit['x']
 
     def reward_fn(self, energy):
         
