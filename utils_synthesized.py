@@ -104,12 +104,12 @@ def dictionary_of_actions_synthesized(num_qubits):
         i += 1
     return dictionary
 
-num_qubits = [2]#list(range(2,20))
-for n in num_qubits:
-    x = len(list(combinations(range(n), 2))) + n*2+n**2
-    y = dictionary_of_actions_synthesized(n)
-    print(y)
-    print(x, len(y.keys()))  
+# num_qubits = [2]#list(range(2,20))
+# for n in num_qubits:
+#     x = len(list(combinations(range(n), 2))) + n*2+n**2
+#     y = dictionary_of_actions_synthesized(n)
+#     print(y)
+#     print(x, len(y.keys()))  
 
 
 
