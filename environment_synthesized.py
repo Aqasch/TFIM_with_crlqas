@@ -165,9 +165,9 @@ class CircuitEnv():
         [0., 0.], - The RZ
         [0., 0.], - The RZCZ
         [0., 0.], - The RZCZ
-        [0., 0.], - The RZCZ (angle)
-        [0., 0.], - The RZCZ (angle)
         [0., 0.], - The RZ (angle)
+        [0., 0.], - The RZCZ (angle)
+        [0., 0.], - The RZCZ (angle)
 
         THE TODO:   Change the whole code as per the modified encoding!
         """
@@ -228,9 +228,11 @@ class CircuitEnv():
         self.illegal_action_new()
         if self.optim_method in ["scipy_each_step"]:
             thetas, _, opt_ang = self.scipy_optim(self.optim_alg)
+            # print(opt_ang, 'Optimized angles!!!')
             for i in range(self.num_layers):
                 for j in range(3):
                     next_state[i][self.num_qubits+3+self.num_qubits+j,:] = thetas[i][j,:]
+        # print(next_state, 'IN THE STEP!!')
         self.opt_ang_save = opt_ang
         self.state = next_state.clone()
         
@@ -259,8 +261,10 @@ class CircuitEnv():
         self.previous_action = copy.deepcopy(action)
         self.save_circ = self.make_circuit_decomposed()
         # print(self.state)
-        # print(self.save_circ)
+        # print(self.save_circ, 'ARE YOU NOT TAKING ANGLES MY BROTHER???')
         # print('---------')
+        # if self.save_circ.depth() >=8:
+        #     exit()
         
 
         if self.random_halt:
@@ -357,6 +361,7 @@ class CircuitEnv():
         if thetas is None:
             thetas = state[:, self.num_qubits+3+self.num_qubits:]
         
+        # print(thetas, 'IN THE MAKE CIRCUIT DECOMPOSED!!!!!')
         circuit = QuantumCircuit(self.num_qubits)
         for i in range(self.num_layers):
             """
@@ -367,15 +372,20 @@ class CircuitEnv():
             """
 
             # mod cz position extraction!
+            # print(state[i][self.num_qubits: self.num_qubits+3], 'individual layer!!!')
             cz_pos = np.where(state[i][0:self.num_qubits] == 1)
             # rotation position extration
             oneq_gate_pos = np.where(state[i][self.num_qubits: self.num_qubits+3] == 1)
             # mod rzcz extration
+            # print('RZCZPOS')
+            # print(state[i][self.num_qubits+3: self.num_qubits+3+self.num_qubits] )
             rzcz_pos = np.where(state[i][self.num_qubits+3: self.num_qubits+3+self.num_qubits] == 1)
+
              
             
             # print(thetas)
             # print(rot_pos)
+            # print(rzcz_pos)
 
             # cz append
             targ_cz = cz_pos[0]
@@ -386,9 +396,15 @@ class CircuitEnv():
             
             targ_rzcz = rzcz_pos[0]
             ctrl_rzcz = rzcz_pos[1]
+            # print(thetas, '!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            # print('the RZCZ pos', rzcz_pos)
             if len(ctrl_rzcz) != 0:
+                # print(i, ctrl_rzcz, 'just an indicator!')
                 for r in range(len(ctrl_rzcz)):
-                    circuit.append(rzcz(thetas[i][targ_rzcz[r]][ctrl_rzcz[r]].item(), ctrl=ctrl_rzcz[r], targ=targ_rzcz[r]), [ctrl_rzcz[r], targ_rzcz[r]])
+                    # print(thetas, i, 'THIS IS THE MAIN THING!!!! CZRZ')
+                    # print(targ_rzcz[r]+1, ctrl_rzcz[r], 'the position of theta for RZCZ')
+                    # print(thetas[i][targ_rzcz[r]+1][ctrl_rzcz[r]].item(), 'the angle on rzcz!!!')
+                    circuit.append(rzcz(thetas[i][targ_rzcz[r]+1][ctrl_rzcz[r]].item(), ctrl=ctrl_rzcz[r], targ=targ_rzcz[r]), [ctrl_rzcz[r], targ_rzcz[r]])
             
             
                   
@@ -401,7 +417,8 @@ class CircuitEnv():
                     elif r == 1:
                         circuit.x(rot_qubit)
                     elif r == 2:
-                        circuit.rz(thetas[i][2][rot_qubit].item(), rot_qubit)
+                        # print(thetas, thetas[i][0][rot_qubit].item(), 'THIS IS THE MAIN THING!!!! RZ')
+                        circuit.rz(thetas[i][0][rot_qubit].item(), rot_qubit)
                     else:
                         print(f'rot-axis = {r} is in invalid')
                         assert r >2
@@ -411,6 +428,7 @@ class CircuitEnv():
     def get_energy(self, thetas=None):
         
         circ = self.make_circuit_decomposed(thetas)
+        # print(circ)
         qiskit_inst = vc.Parametric_Circuit(n_qubits = self.num_qubits, noise_models = self.noise_models, noise_values = self.noise_values)
         
         # print(circ)
@@ -491,13 +509,18 @@ class CircuitEnv():
 
         if list(which_angles):
             result_min_qiskit = scipy.optimize.minimize(cost, x0 = x0[which_angles], method = method, options = {'maxiter':self.global_iters})
+            # print(result_min_qiskit['x'], which_angles, 1)
             x0[which_angles] = result_min_qiskit['x']
             thetas = state[:, self.num_qubits+3+self.num_qubits:]
             thetas[rot_pos] = torch.tensor(x0, dtype=torch.float)
         else:
             result_min_qiskit = scipy.optimize.minimize(cost, x0 = x0, method = method, options = {'maxiter':self.global_iters})
+            # print(result_min_qiskit['x'], which_angles, 2)
             thetas = state[:, self.num_qubits+3+self.num_qubits:]
+            # print(thetas, 'in scipy_optim before')
             thetas[rot_pos] = torch.tensor(result_min_qiskit['x'], dtype=torch.float)
+            # print(thetas, 'in scipy_optim after')
+
 
         return thetas, result_min_qiskit['nfev'], result_min_qiskit['x']
 

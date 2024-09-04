@@ -116,7 +116,7 @@ class Parametric_Circuit:
 
             if len(ctrl_rzcz) != 0:
                 for r in range(len(ctrl_rzcz)):
-                    self.ansatz.append(rzcz(thetas[targ_rzcz[r].item()][targ_rzcz[r].item()].item(), ctrl=ctrl_rzcz[r].item(), targ=targ_rzcz[r].item()), [ctrl_rzcz[r].item(), targ_rzcz[r].item()])
+                    self.ansatz.append(rzcz(thetas[targ_rzcz[r].item()+1][targ_rzcz[r].item()].item(), ctrl=ctrl_rzcz[r].item(), targ=targ_rzcz[r].item()), [ctrl_rzcz[r].item(), targ_rzcz[r].item()])
             
             rot_direction_list = one_gate_pos[0]
             rot_qubit_list = one_gate_pos[1]
@@ -128,7 +128,7 @@ class Parametric_Circuit:
                     elif r == 1:
                         self.ansatz.x(rot_qubit.item())
                     elif r == 2:
-                        self.ansatz.rz(thetas[2][rot_qubit].item(), rot_qubit.item())
+                        self.ansatz.rz(thetas[0][rot_qubit].item(), rot_qubit.item())
                     else:
                         print(f'rot-axis = {r} is in invalid')
                         assert r >2                       
