@@ -40,16 +40,18 @@ class DQN(object):
         self.action_size = action_size
 
         self.state_size = state_size if self.with_angles else state_size - self.num_layers*self.num_qubits*3
+        # print('---------------')
+        # print(self.state_size)
+        # print('---------------')
 
         self.state_size = self.state_size + 1 if conf['agent']['en_state'] else self.state_size
         self.state_size = self.state_size + 1 if ("threshold_in_state" in conf['agent'].keys() and conf['agent']["threshold_in_state"]) else self.state_size
+        # print('---------------')
+        # print(self.state_size)
+        # print('---------------')
 
-        if self.decomposed:
-            self.translate = dictionary_of_actions_decomposed(self.num_qubits)
-            self.rev_translate = dict_of_actions_revert_q_decomposed(self.num_qubits)
-        else:
-            self.translate = dictionary_of_actions(self.num_qubits)
-            self.rev_translate = dict_of_actions_revert_q(self.num_qubits)
+        self.translate = dictionary_of_actions_decomposed(self.num_qubits)
+        self.rev_translate = dictionary_of_actions_decomposed(self.num_qubits)
         self.policy_net = self.unpack_network(neuron_list, drop_prob).to(device)
         self.target_net = copy.deepcopy(self.policy_net)
         self.target_net.eval()
@@ -100,6 +102,7 @@ class DQN(object):
         action_batch = torch.stack(batch.action)
         reward_batch = torch.stack(batch.reward)
         done_batch = torch.stack(batch.done)
+        # print(state_batch.shape)
         
 
         state_action_values = self.policy_net.forward(state_batch).gather(1, action_batch.unsqueeze(1))

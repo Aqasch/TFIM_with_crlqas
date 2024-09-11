@@ -126,7 +126,7 @@ def get_energy_qulacs_(angles, observable,
     return float(energy.real)#[0][0]
 
 
-def get_energy_qulacs(angles, observable,circuit, n_qubits, n_shots,
+def get_energy_qiskit(angles, observable,circuit, n_qubits, n_shots,
                       phys_noise = False,
                       which_angles=[]):
     """"

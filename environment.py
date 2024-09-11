@@ -211,7 +211,7 @@ class CircuitEnv():
     
         self.error = float(abs(self.min_eig-energy))
         self.error_noiseless = float(abs(self.min_eig-energy_noiseless))
-        # print(self.error, self.done_threshold)
+        print(self.error, self.done_threshold)
         rwd = self.reward_fn(energy)
         self.prev_energy = np.copy(energy)
 
@@ -431,7 +431,7 @@ class CircuitEnv():
         x0 = np.asarray(angles.cpu().detach())
 
         def cost(x):
-            return vc.get_energy_qulacs(x, observable = self.hamiltonian, circuit = qulacs_circuit,
+            return vc.get_energy_qiskit(x, observable = self.hamiltonian, circuit = qulacs_circuit,
             n_qubits = self.num_qubits,
             n_shots = int(self.n_shots), phys_noise = self.phys_noise,
                       which_angles=[])

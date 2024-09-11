@@ -260,7 +260,8 @@ class CircuitEnv():
         
         self.previous_action = copy.deepcopy(action)
         self.save_circ = self.make_circuit_decomposed()
-        # print(self.state)
+        # print(thetas)
+        print(self.error, self.done_threshold)
         # print(self.save_circ, 'ARE YOU NOT TAKING ANGLES MY BROTHER???')
         # print('---------')
         # if self.save_circ.depth() >=8:
@@ -498,6 +499,7 @@ class CircuitEnv():
         qiskit_inst = vc.Parametric_Circuit(n_qubits=self.num_qubits,noise_models=self.noise_models,noise_values = self.noise_values)
         
         qiskit_circuit = qiskit_inst.construct_ansatz_decomposed(state)
+        # print(qiskit_circuit)
         
         x0 = np.asarray(angles.cpu().detach())
 
@@ -724,10 +726,14 @@ class CircuitEnv():
     def illegal_action_new(self):
         action = self.current_action
         illegal_action = self.illegal_actions
-        ctrl, targ = action[0], (action[0] + action[1]) % self.num_qubits
-        rot_qubit, rot_axis = action[2], action[3]
+        ctrl1 = action[0] # CONTROL FOR CZ
+        targ1 = action[1] # TARGET FOR CZ
+        ctrl2 = action[2] # CONTROL FOR RZCZ
+        targ2 = (action[2] + action[3]) % self.num_qubits # TARGET FOR RZCZ
+        rot_qubit = action[4]
+        rot_axis = action[5]
 
-        if ctrl < self.num_qubits:
+        if ctrl1 < self.num_qubits:
             are_you_empty = sum([sum(l) for l in illegal_action])
             
             if are_you_empty != 0:
@@ -738,14 +744,14 @@ class CircuitEnv():
                         
                         if ill_ac[2] == self.num_qubits:
                         
-                            if ctrl == ill_ac[0] or ctrl == ill_ac_targ:
+                            if ctrl1 == ill_ac[0] or ctrl1 == ill_ac_targ:
                                 illegal_action[ill_ac_no] = []
                                 for i in range(1, self.num_qubits):
                                     if len(illegal_action[i]) == 0:
                                         illegal_action[i] = action
                                         break
 
-                            elif targ == ill_ac[0] or targ == ill_ac_targ:
+                            elif targ1 == ill_ac[0] or targ1 == ill_ac_targ:
                                 illegal_action[ill_ac_no] = []
                                 for i in range(1, self.num_qubits):
                                     if len(illegal_action[i]) == 0:
@@ -758,14 +764,66 @@ class CircuitEnv():
                                         illegal_action[i] = action
                                         break
                         else:
-                            if ctrl == ill_ac[2]:
+                            if ctrl1 == ill_ac[2]:
                                 illegal_action[ill_ac_no] = []
                                 for i in range(1, self.num_qubits):
                                     if len(illegal_action[i]) == 0:
                                         illegal_action[i] = action
                                         break
 
-                            elif targ == ill_ac[2]:
+                            elif targ1 == ill_ac[2]:
+                                illegal_action[ill_ac_no] = []
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break
+                            else:
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break                          
+            else:
+                illegal_action[0] = action
+
+        if ctrl2 < self.num_qubits:
+            are_you_empty = sum([sum(l) for l in illegal_action])
+            
+            if are_you_empty != 0:
+                for ill_ac_no, ill_ac in enumerate(illegal_action):
+                    
+                    if len(ill_ac) != 0:
+                        ill_ac_targ = ( ill_ac[0] + ill_ac[1] ) % self.num_qubits
+                        
+                        if ill_ac[2] == self.num_qubits:
+                        
+                            if ctrl2 == ill_ac[0] or ctrl2 == ill_ac_targ:
+                                illegal_action[ill_ac_no] = []
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break
+
+                            elif targ2 == ill_ac[0] or targ2 == ill_ac_targ:
+                                illegal_action[ill_ac_no] = []
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break
+                            
+                            else:
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break
+                        else:
+                            if ctrl2 == ill_ac[2]:
+                                illegal_action[ill_ac_no] = []
+                                for i in range(1, self.num_qubits):
+                                    if len(illegal_action[i]) == 0:
+                                        illegal_action[i] = action
+                                        break
+
+                            elif targ2 == ill_ac[2]:
                                 illegal_action[ill_ac_no] = []
                                 for i in range(1, self.num_qubits):
                                     if len(illegal_action[i]) == 0:

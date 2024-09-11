@@ -58,7 +58,8 @@ def modify_state(state,env):
         
     if "threshold_in_state" in conf['agent'].keys() and conf['agent']["threshold_in_state"]:
         state = torch.cat((state, torch.tensor(env.done_threshold,dtype=torch.float,device=device).view(1)))
-         
+    # print('state size in modified state')
+    # print(state.shape)  
     return state
 
 
@@ -152,7 +153,7 @@ def one_episode(episode_no, env, agent, episodes):
             # print('time:', time.time()-t0)
             if episode_no%20==0:
                 print("episode: {}/{}, score: {}, e: {:.2}, rwd: {} \n"
-                        .format(episode_no, episodes, itr, agent.epsilon, reward),flush=True)
+                        .format(episode_no, episodes, itr+1, agent.epsilon, reward),flush=True)
             break 
         
         if len(agent.memory) > conf['agent']['batch_size']:
@@ -200,8 +201,8 @@ if __name__ == '__main__':
 
     results_path ="results/"
     pathlib.Path(f"{results_path}{args.experiment_name}{args.config}").mkdir(parents=True, exist_ok=True)
-    device = torch.device(f"cuda:{args.gpu_id}")
-    # device = torch.device(f"cpu:0")
+    # device = torch.device(f"cuda:{args.gpu_id}")
+    device = torch.device(f"cpu:0")
     
     
     conf = get_config(args.experiment_name, f'{args.config}.cfg')
