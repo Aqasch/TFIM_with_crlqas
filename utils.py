@@ -75,40 +75,7 @@ def dictionary_of_actions_decomposed(num_qubits):
                            range(1, 4)):
         dictionary[i] = [num_qubits, 0, r, h]
         i += 1
-    return dictionary
-
-def dictionary_of_actions_synthesized(num_qubits):
-    """
-    Creates dictionary of actions for system which steers positions of gates,
-    and axes of rotations.
-    """
-    dictionary = dict()
-    i = 0
-    """c is the control and (c+x) % num_qubits is the target of RZCZ"""    
-    for c, x in product(range(num_qubits),
-                        range(1, num_qubits)):
-        dictionary[i] =  [c, x, num_qubits, 0, num_qubits, 0]
-        i += 1
-    
-    """c is the control and (c+x) % num_qubits is the target of CZ"""
-    for c in range(num_qubits):
-        for x in range(c + 1, num_qubits):
-            dictionary[i] = [num_qubits, 0, c, x, num_qubits, 0]
-            i += 1
-   
-    """h  denotes which gate. 1, 2, 3 -->  SX, X, RZ axes """
-    for r, h in product(range(num_qubits),
-                           range(1, 4)):
-        dictionary[i] = [num_qubits, 0, num_qubits, 0, r, h]
-        i += 1
-    return dictionary
-
-num_qubits = 4
-x = dictionary_of_actions_synthesized(num_qubits)
-print(x)
-
-
-
+    return dictionary 
 
 def dict_of_actions_revert_q(num_qubits):
     """
